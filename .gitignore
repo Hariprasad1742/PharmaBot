@@ -1,0 +1,25 @@
+/qdrant_storage
+# ==================================
+# Rule for the root 'pharma_new' folder
+# ==================================
+
+# Ignore everything by default
+*
+
+# But do NOT ignore the 'final' directory itself
+!final/
+
+# Also, do NOT ignore this .gitignore file
+!.gitignore
+
+
+# ==================================
+# Rules for inside the 'final' folder
+# ==================================
+
+# Ignore all contents of the 'final' folder
+final/*
+
+# But do NOT ignore the 'fast' sub-folder and the specific script
+!final/fast/
+!final/generate_medication_embeddings.py
