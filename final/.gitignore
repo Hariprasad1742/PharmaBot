@@ -1,6 +1,6 @@
 /__pycache__
 /chroma_db_test
-/fast
+
 /med_embeddings
 /models
 /qdrant_storage
