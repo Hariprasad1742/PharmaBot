@@ -1,25 +1,42 @@
 /qdrant_storage
 # ==================================
 # Rule for the root 'pharma_new' folder
-# ==================================
+# # ==================================
 
-# Ignore everything by default
-*
+# # Ignore everything by default
+# *
 
-# But do NOT ignore the 'final' directory itself
-!final/
+# # But do NOT ignore the 'final' directory itself
+# !final/
 
-# Also, do NOT ignore this .gitignore file
-!.gitignore
+# # Also, do NOT ignore this .gitignore file
+# !.gitignore
 
 
-# ==================================
-# Rules for inside the 'final' folder
-# ==================================
+# # ==================================
+# # Rules for inside the 'final' folder
+# # ==================================
 
-# Ignore all contents of the 'final' folder
-final/*
+# # Ignore all contents of the 'final' folder
+# final/*
 
-# But do NOT ignore the 'fast' sub-folder and the specific script
-!final/fast/
-!final/generate_medication_embeddings.py
+# # But do NOT ignore the 'fast' sub-folder and the specific script
+# !final/fast/
+# !final/generate_medication_embeddings.py
+
+/etc
+/include
+1medication_embeddings.parquet
+chatbot_qa_pairs.csv
+Cleaned_MID_data.csv
+/Lib
+/Scripts
+/share
+docker-compose.yml
+interactive_mode.py
+medication_db.py
+
+pyvenv.cfg
+RAG.py
+
+RAG2.py
