@@ -53,7 +53,7 @@ class QueryResponse(BaseModel):
 # --- 3. FastAPI App Initialization ---
 app = FastAPI(title="Pharmabot API", description="An API for querying the medication RAG system.")
 
-# --- 4. Global Variables & Cached Models ---
+# --- 4. Global Variables & Cached Models --
 bm25_index: Optional[BM25Okapi] = None
 document_store: Optional[List[Dict]] = None
 doc_id_to_doc: Optional[Dict[str, Dict]] = None
@@ -217,4 +217,4 @@ async def ask_question(request: QueryRequest):
         raise http_exc
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        raise HTTPException(status_code=500, detail="An internal server error occurred.")
+        raise HTTPException(status_code=500, detail="An internal server error occurred")
