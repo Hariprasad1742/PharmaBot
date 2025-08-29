@@ -6,5 +6,7 @@
 
 4. MID_Q&A_Chunks.jsonl: https://drive.google.com/file/d/1SgLemsI-c6hY8DdsUGVJXNtiTG3D4q5m/view?usp=drive_link 
 
-5. MedGemma Instruction tuned, Quantized 4bit model is here: https://huggingface.co/DevQuasar/google.medgemma-4b-it-GGUF
+5.  Q&A Text Embeddings: https://drive.google.com/file/d/11qZ3I1yupcqbiMIgPLcgCBbzhUYHLHAh/view?usp=drive_link
+  
+6. MedGemma Instruction tuned, Quantized 4bit model is here: https://huggingface.co/DevQuasar/google.medgemma-4b-it-GGUF
 
