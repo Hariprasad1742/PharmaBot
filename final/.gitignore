@@ -1,11 +1,14 @@
 /__pycache__
 /chroma_db_test
-
+/chroma_db
 /med_embeddings
 /models
 /qdrant_storage
 .env
 cc.ipynb
+testrag.py
+.gitignore
+verify_chroma_data.py
 check.py
 chroma_push.py
 embed_large_scale.py

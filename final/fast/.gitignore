@@ -2,3 +2,6 @@
 /chroma_db_test
 /my_chroma_db
 docker-compose.yml
+eval.py
+test_main.py
+.gitignore
