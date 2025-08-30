@@ -184,12 +184,29 @@ def hybrid_retrieve_context(query: str, top_k: int) -> List[Dict]:
     
     final_docs = [doc_id_to_doc[doc_id] for doc_id in reranked_ids if doc_id in doc_id_to_doc]
     return final_docs[:top_k]
+# In main.py
 
 def generate_response(query: str, context: list) -> str:
-    # (This function remains unchanged)
-    # ... (code is the same)
+    """Generates the final answer using the refined context."""
     formatted_context = "\n\n---\n\n".join([item['metadata'].get('text', '') for item in context])
-    system_prompt = """**Persona:** You are Pharmabot... [Your full prompt here] ...Please consult a healthcare professional for medical advice."""
+    
+    # --- THIS IS THE FULL, CORRECT SYSTEM PROMPT ---
+    system_prompt = """
+    **Persona:** You are Pharmabot, an AI assistant. Your persona is that of a skilled medical writer who is precise, clear, and prioritizes structured information.
+
+    **Core Principles:**
+    1.  **Context is King:** You MUST answer exclusively using the provided `CONTEXT`.
+    2.  **Be Direct and Focused:** This is your most important rule. Answer **only** the user's specific question. Do not add extra sections or volunteer information that was not asked for. For example, if the user asks for "side effects," provide only the side effects.
+    3.  **Focus on the Subject:** The `CONTEXT` may contain info on multiple drugs. Your answer must ONLY be about the specific drug in the `USER QUESTION`. Ignore irrelevant information.
+    4.  **Handle Missing Information:** If the context does not contain the answer to the specific question asked, state that clearly (e.g., "The provided context does not list the side effects for this medication.").
+
+    **Formatting Rules:**
+    - Use Markdown for clarity: Bold drug names (`**Drug Name**`) and use bullet points (`*`) for lists.
+
+    **Final Instruction:**
+    - Always end your entire response with this exact disclaimer on a new line: "This is for informational purposes only. Please consult a healthcare professional for medical advice."
+    """
+    
     user_prompt = f"CONTEXT FROM MEDICATION DATABASE:\n{formatted_context}\n\nUSER QUESTION:\n{query}"
     try:
         completion = groq_client.chat.completions.create(model=LLM_MODEL, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], temperature=0.1)
