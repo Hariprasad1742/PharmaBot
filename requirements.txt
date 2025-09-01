@@ -3,3 +3,11 @@ sentence-transformers
 pandas
 openpyxl
 langchain
+fastapi
+uvicorn[standard]
+python-dotenv
+groq
+sentence-transformers
+pymilvus
+rank_bm25
+numpy
