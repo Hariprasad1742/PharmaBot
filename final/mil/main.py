@@ -19,17 +19,24 @@ groq_client = Groq(api_key=api_key)
 
 MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-COLLECTION_NAME = 'medication_embeddings_milvus_test'
+COLLECTION_NAME = 'medication'
 
+# --- Schema Field Names ---
+# NOTE: Your loading script used 'vector', but your RAG app code used 'v'. 
+# I've changed VECTOR_FIELD to 'vector' to match the loading script. Please verify.
 PK_FIELD = "id"
-VECTOR_FIELD = "v"
+VECTOR_FIELD = "vector" 
 TEXT_CHUNK_FIELD = "text"
 METADATA_FIELDS = ["drug_name", "section_title", "text"]
 
+# --- Model and Search Configuration ---
 EMBEDDING_MODEL = 'pritamdeka/S-BioBert-snli-multinli-stsb'
 LLM_MODEL = 'llama-3.1-8b-instant'
-NUM_CANDIDATE_RESULTS = 10
+NUM_CANDIDATE_RESULTS = 20
 FINAL_TOP_K = 3
+    
+# --- NEW: Limit for BM25 Index ---
+MAX_DOCS_FOR_BM25 = 1168307 # 1 Lakh
 
 TOPIC_KEYWORD_TO_SECTION_MAP = {
     "side effect": "SideEffect", "benefit": "ProductUses", "use": "ProductUses",
@@ -62,36 +69,73 @@ def get_db_collection():
 
 @app.on_event("startup")
 def startup_event():
+    """Connect to Milvus, load a subset of a collection, and build the BM25 index."""
     global bm25_index, document_store, doc_id_to_doc
+    
     print(f"Connecting to Milvus at {MILVUS_HOST}:{MILVUS_PORT}...")
     try:
         connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
         if not utility.has_collection(COLLECTION_NAME):
             raise ConnectionError(f"FATAL: Collection '{COLLECTION_NAME}' does not exist.")
+        
         collection = get_db_collection()
         print("Loading Milvus collection into memory...")
         collection.load()
-        print("Collection loaded.")
+        print("Collection loaded successfully.")
     except Exception as e:
         print(f"FATAL: Could not connect to or load Milvus collection. Error: {e}")
         return
 
-    print("Building BM25 index from Milvus documents...")
+    print("Building BM25 index from a subset of Milvus documents...")
     try:
-        all_docs_milvus = collection.query(expr=f'{PK_FIELD} != ""', output_fields=[PK_FIELD, TEXT_CHUNK_FIELD] + METADATA_FIELDS)
+        num_entities = collection.num_entities
+        print(f"Found {num_entities} total entities in the collection.")
+        
+        all_docs_milvus = []
+        
+        iterator = collection.query_iterator(
+            expr=f'{PK_FIELD} != ""',
+            output_fields=[PK_FIELD, TEXT_CHUNK_FIELD] + METADATA_FIELDS,
+            batch_size=1000
+        )
+        
+        # --- MODIFIED LOOP with a limit ---
+        while True:
+            batch = iterator.next()
+            if not batch:
+                break
+            all_docs_milvus.extend(batch)
+            print(f"Fetched {len(all_docs_milvus)} of {num_entities} entities...")
+            
+            # Stop once we've reached our defined limit
+            if len(all_docs_milvus) >= MAX_DOCS_FOR_BM25:
+                print(f"Reached the limit of {MAX_DOCS_FOR_BM25} documents for the BM25 index.")
+                # We also need to trim the list to be exactly the max size
+                all_docs_milvus = all_docs_milvus[:MAX_DOCS_FOR_BM25]
+                break
+        
+        iterator.close()
+        # --- END OF MODIFICATION ---
+
         if not all_docs_milvus:
-            print(f"Warning: No documents in '{COLLECTION_NAME}'. BM25 index empty.")
+            print(f"Warning: No documents found. BM25 index will be empty.")
             return
 
+        print(f"Finished fetching. Building BM25 index from {len(all_docs_milvus)} documents (this may take a moment)...")
         document_store = []
         for doc_data in all_docs_milvus:
             metadata = {field: doc_data.get(field) for field in METADATA_FIELDS}
-            document_store.append({"id": doc_data[PK_FIELD], "document": doc_data[TEXT_CHUNK_FIELD], "metadata": metadata})
+            document_store.append({
+                "id": doc_data[PK_FIELD],
+                "document": doc_data[TEXT_CHUNK_FIELD],
+                "metadata": metadata
+            })
 
         doc_id_to_doc = {doc['id']: doc for doc in document_store}
         tokenized_corpus = [doc['document'].split(" ") for doc in document_store]
         bm25_index = BM25Okapi(tokenized_corpus)
-        print("BM25 index built successfully.")
+        print("✅ BM25 index built successfully.")
+
     except Exception as e:
         print(f"Error building BM25 index: {e}")
 
@@ -123,7 +167,7 @@ def rerank_context(query: str, documents: List[Dict], top_k: int) -> List[Dict]:
 
 def hybrid_retrieve_context(query: str, top_k: int) -> List[Dict]:
     if bm25_index is None or doc_id_to_doc is None:
-        raise HTTPException(status_code=503, detail="Server is starting up. Please try again.")
+        raise HTTPException(status_code=503, detail="Server is starting up, BM25 index not ready. Please try again.")
 
     query_lower = query.lower()
     all_drug_names = set(doc['metadata'].get('drug_name') for doc in document_store if doc['metadata'].get('drug_name'))
@@ -175,11 +219,11 @@ def generate_response(query: str, context: list) -> str:
     **Persona:** You are Pharmabot, an AI assistant. Your persona is that of a skilled medical writer who is precise, clear, and prioritizes structured information.
     **Core Principles:**
     1.  **Context is King:** You MUST answer exclusively using the provided `CONTEXT`.
-    2.  **Be Direct and Focused:** Answer **only** the user's specific question. Do not add extra sections or volunteer information that was not asked for.
-    3.  **Focus on the Subject:** Your answer must ONLY be about the specific drug in the `USER QUESTION`. Ignore irrelevant information.
+    2.  **Be Direct and Focused:** Answer **only** the user's specific question.
+    3.  **Focus on the Subject:** Your answer must ONLY be about the specific drug in the `USER QUESTION`.
     4.  **Handle Missing Information:** If the context does not contain the answer, state that clearly.
     **Formatting Rules:**
-    - Use Markdown for clarity: Bold drug names (`**Drug Name**`) and use bullet points (`*`) for lists.
+    - Use Markdown for clarity: Bold drug names and use bullet points for lists.
     **Final Instruction:**
     - Always end your entire response with this exact disclaimer on a new line: "This is for informational purposes only. Please consult a healthcare professional for medical advice."
     """
