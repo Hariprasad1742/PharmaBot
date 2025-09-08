@@ -16,7 +16,7 @@ load_dotenv()
 # Service Configuration
 MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
-TOKEN = os.getenv("MILVUS_TOKEN")
+TOKEN = os.getenv("MILVUS_TOKEN") # Set your token in .env if needed
 COLLECTION_NAME = 'medication'
 
 # Schema Field Names
@@ -27,9 +27,9 @@ METADATA_FIELDS = ["drug_name", "section_title", TEXT_CHUNK_FIELD]
 
 # Model and Search Configuration
 EMBEDDING_MODEL = 'pritamdeka/S-BioBert-snli-multinli-stsb'
-LLM_MODEL = 'llama-3.3-70b-versatile'
-NUM_CANDIDATES = 10
-DEFAULT_TOP_K = 3
+LLM_MODEL = 'llama3-8b-8192'
+NUM_CANDIDATES = 10 # Number of results to fetch from each search before fusion
+DEFAULT_TOP_K = 3   # Final number of documents to use for the answer
 
 # --- 2. PROMPT TEMPLATE ---
 FINAL_SYSTEM_PROMPT = """
@@ -60,7 +60,6 @@ class QueryResponse(BaseModel):
     answer: str
     source_documents: List[Dict]
 
-# This is the FastAPI application instance that uvicorn needs to find.
 app = FastAPI(
     title="Pharmabot API (Hybrid Search Edition)",
     description="A RAG system using Milvus with Hybrid Search (Keyword + Vector) and Rank Fusion."
@@ -94,39 +93,20 @@ def startup_event():
         
         print("Loading Milvus collection into memory...")
         client.load_collection(collection_name=COLLECTION_NAME)
-        app.state.milvus_client = client # Store client in app state for access in endpoints
+        app.state.milvus_client = client # Store client in app state
         print("✅ Collection loaded successfully. Application is ready.")
     except Exception as e:
         print(f"FATAL: Could not connect or load Milvus collection. Error: {e}")
+        # Exit if Milvus connection fails on startup
         raise SystemExit(1) from e
 
 # --- 6. CORE RAG FUNCTIONS ---
-# In main.py, replace the old hybrid_retrieve_and_fuse function with this one.
-
-# Define a list of common words to ignore in searches
-STOP_WORDS = set(["what", "are", "the", "is", "of", "for", "a", "an", "mg", "capsule", "tablet", "side", "effects", "uses", "how", "to", "take"])
-
 def hybrid_retrieve_and_fuse(client: MilvusClient, query: str, top_k: int) -> List[Dict]:
     """
-    Performs a smarter hybrid retrieval with stop word removal and pre-filtering.
+    Performs hybrid retrieval using keyword and vector search, then fuses the results.
     """
-    
-    # 1. Pre-process the query
-    query_words = [word for word in query.lower().split() if word not in STOP_WORDS]
-    
-    # Simple entity extraction: Assume the capitalized or longest words are the drug name
-    drug_name_candidates = [word for word in query.split() if word.istitle() or (len(word) > 4 and word.lower() not in STOP_WORDS)]
-    potential_drug_name = " ".join(drug_name_candidates)
-    
-    print(f"Refined search words: {query_words}")
-    print(f"Potential drug name for filtering: {potential_drug_name}")
-
-    # 2. Keyword Search (now with less noise)
-    if query_words:
-        keyword_expr = " and ".join([f"{TEXT_CHUNK_FIELD} like '%{word}%'" for word in query_words])
-    else: # Fallback if only stop words were in query
-        keyword_expr = " or ".join([f"{TEXT_CHUNK_FIELD} like '%{word}%'" for word in query.split()])
-        
+    # 1. Keyword Search
+    keyword_expr = " or ".join([f"{TEXT_CHUNK_FIELD} like '%{word}%'" for word in query.split()])
     keyword_results = client.query(
         collection_name=COLLECTION_NAME,
         filter=keyword_expr,
@@ -134,26 +114,21 @@ def hybrid_retrieve_and_fuse(client: MilvusClient, query: str, top_k: int) -> Li
         limit=top_k
     )
 
-    # 3. Vector Search (with pre-filtering if possible)
+    # 2. Vector Search
     model = get_embedding_model()
     query_vector = model.encode(query).tolist()
-    search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
-    
-    # This filter is the most important improvement
-    vector_filter = f"drug_name like '%{potential_drug_name}%'" if potential_drug_name else ""
-
+    search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
     vector_search_hits = client.search(
         collection_name=COLLECTION_NAME,
         data=[query_vector],
         anns_field=VECTOR_FIELD,
         search_params=search_params,
-        filter=vector_filter, # Apply the pre-filter here
         output_fields=METADATA_FIELDS + [PK_FIELD],
         limit=top_k
     )
     vector_results = [hit['entity'] for hit in vector_search_hits[0]]
 
-    # 4. Reciprocal Rank Fusion (RRF)
+    # 3. Reciprocal Rank Fusion (RRF)
     fused_scores = {}
     all_results = [keyword_results, vector_results]
     for results in all_results:
@@ -161,15 +136,14 @@ def hybrid_retrieve_and_fuse(client: MilvusClient, query: str, top_k: int) -> Li
             doc_id = doc[PK_FIELD]
             if doc_id not in fused_scores:
                 fused_scores[doc_id] = 0
-            fused_scores[doc_id] += 1 / (60 + rank + 1)
+            fused_scores[doc_id] += 1 / (60 + rank + 1) # RRF with k=60
 
     if not fused_scores:
         return []
 
     reranked_ids = [doc_id for doc_id, _ in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)]
     
-    # 5. Fetch final documents in the new order
-    if not reranked_ids: return []
+    # 4. Fetch final documents in the new order
     id_filter = f"{PK_FIELD} in {reranked_ids}"
     final_docs = client.query(COLLECTION_NAME, id_filter, output_fields=METADATA_FIELDS + [PK_FIELD])
     doc_map = {doc[PK_FIELD]: doc for doc in final_docs}
@@ -196,21 +170,28 @@ def generate_response(query: str, context: List[Dict]) -> str:
 # --- 7. API ENDPOINT ---
 @app.post("/ask", response_model=QueryResponse)
 async def ask_question(request: Request, query_request: QueryRequest):
-    """Handles a user's question by retrieving context, generating an answer, and returning it along with the source documents."""
+    """
+    Handles a user's question by retrieving context, generating an answer,
+    and returning it along with the source documents.
+    """
     try:
         milvus_client = request.app.state.milvus_client
         
+        # Retrieve a pool of candidate documents using hybrid search
         fused_docs = hybrid_retrieve_and_fuse(milvus_client, query_request.question, NUM_CANDIDATES)
         if not fused_docs:
             raise HTTPException(status_code=404, detail="Could not find any relevant documents in the database.")
 
+        # Select the final top_k documents to use as context
         final_context = fused_docs[:query_request.top_k]
         
+        # Generate the final answer
         answer = generate_response(query_request.question, final_context)
         
         return QueryResponse(answer=answer, source_documents=final_context)
         
     except HTTPException as http_exc:
+        # Re-raise HTTPException to let FastAPI handle it
         raise http_exc
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
