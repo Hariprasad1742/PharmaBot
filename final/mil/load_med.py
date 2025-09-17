@@ -14,9 +14,9 @@ from pymilvus import (
 )
 
 # --- CONFIGURATION ---
-parquet_path = r'H:\syntorion\pharmabot\pharma_new\final\finalmedication_embeddings_final.parquet'
+parquet_path = r'H:\syntorion\pharmabot\pharma_new\final\med_embeddings\medication_batch_1.parquet'
 batch_size = 100
-collection_name = 'medication'
+collection_name = 'samplemedication'
 
 MILVUS_HOST = "localhost"
 MILVUS_PORT = "19530"

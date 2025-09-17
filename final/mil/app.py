@@ -22,7 +22,7 @@ for message in st.session_state.messages:
                 for i, source in enumerate(message["sources"]):
                     med_name = source.get('drug_name', 'Unknown Medication')
                     # Corrected to use 'topic'
-                    source_topic = source.get('topic', 'Unknown Topic')
+                    source_topic = source.get('section_title', 'Unknown Topic')
                     st.write(f"**Source {i+1}:** {med_name} - *{source_topic}*")
                     st.caption(source.get('text'))
 

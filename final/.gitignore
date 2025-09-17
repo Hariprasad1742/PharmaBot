@@ -7,10 +7,10 @@
 .env
 cc.ipynb
 /milvus-standalone
-
+/graph
 evaluation_dataset.py
 .gitignore
-
+meow.py
 verify_chroma_data.py
 QA_Embeddings.parquet
 check.py
@@ -18,6 +18,7 @@ chroma_push.py
 embed_large_scale.py
 embed_qa.py
 embeddings_batch_0.parquet
+ragas_evaluation_results.xlsx
 finalmedication_embeddings_final.parquet
 generate_qa_embeddings.py
 groqrag.py
