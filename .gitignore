@@ -23,7 +23,8 @@
 # # But do NOT ignore the 'fast' sub-folder and the specific script
 # !final/fast/
 # !final/generate_medication_embeddings.py
-
+/models
+gitignore
 /etc
 /include
 1medication_embeddings.parquet

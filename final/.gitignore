@@ -35,3 +35,5 @@ rr.py
 test.ipynb
 testing.py
 merge.py
+final_finetune_format.parquet
+gitignore
